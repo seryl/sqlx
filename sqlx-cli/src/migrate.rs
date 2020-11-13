@@ -6,13 +6,11 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
 
-const MIGRATION_FOLDER: &'static str = "migrations";
-
-pub fn add(description: &str) -> anyhow::Result<()> {
+pub fn add(migration_source: &str, description: &str) -> anyhow::Result<()> {
     use chrono::prelude::*;
     use std::path::PathBuf;
 
-    fs::create_dir_all(MIGRATION_FOLDER).context("Unable to create migrations directory")?;
+    fs::create_dir_all(migration_source).context("Unable to create migrations directory")?;
 
     let dt = Utc::now();
     let mut file_name = dt.format("%Y%m%d%H%M%S").to_string();
@@ -21,7 +19,7 @@ pub fn add(description: &str) -> anyhow::Result<()> {
     file_name.push_str(".sql");
 
     let mut path = PathBuf::new();
-    path.push(MIGRATION_FOLDER);
+    path.push(migration_source);
     path.push(&file_name);
 
     println!("Creating {}", style(path.display()).cyan());
@@ -33,8 +31,8 @@ pub fn add(description: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub async fn info(uri: &str) -> anyhow::Result<()> {
-    let migrator = Migrator::new(Path::new(MIGRATION_FOLDER)).await?;
+pub async fn info(migration_source: &str, uri: &str) -> anyhow::Result<()> {
+    let migrator = Migrator::new(Path::new(migration_source)).await?;
     let mut conn = AnyConnection::connect(uri).await?;
 
     conn.ensure_migrations_table().await?;
@@ -57,8 +55,8 @@ pub async fn info(uri: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub async fn run(uri: &str) -> anyhow::Result<()> {
-    let migrator = Migrator::new(Path::new(MIGRATION_FOLDER)).await?;
+pub async fn run(migration_source: &str, uri: &str) -> anyhow::Result<()> {
+    let migrator = Migrator::new(Path::new(migration_source)).await?;
     let mut conn = AnyConnection::connect(uri).await?;
 
     conn.ensure_migrations_table().await?;
