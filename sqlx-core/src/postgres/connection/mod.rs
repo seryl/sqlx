@@ -113,6 +113,7 @@ impl Connection for PgConnection {
 
     type Options = PgConnectOptions;
 
+    #[cfg(not(any(feature = "_rt-actix", feature = "_rt-tokio")))]
     fn close(mut self) -> BoxFuture<'static, Result<(), Error>> {
         // The normal, graceful termination procedure is that the frontend sends a Terminate
         // message and immediately closes the connection.
@@ -123,6 +124,22 @@ impl Connection for PgConnection {
         Box::pin(async move {
             self.stream.send(Terminate).await?;
             self.stream.shutdown()?;
+
+            Ok(())
+        })
+    }
+
+    #[cfg(any(feature = "_rt-actix", feature = "_rt-tokio"))]
+    fn close(mut self) -> BoxFuture<'static, Result<(), Error>> {
+        // The normal, graceful termination procedure is that the frontend sends a Terminate
+        // message and immediately closes the connection.
+
+        // On receipt of this message, the backend closes the
+        // connection and terminates.
+
+        Box::pin(async move {
+            self.stream.send(Terminate).await?;
+            self.stream.shutdown().await?;
 
             Ok(())
         })

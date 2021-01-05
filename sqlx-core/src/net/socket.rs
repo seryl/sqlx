@@ -1,11 +1,14 @@
 #![allow(dead_code)]
 
 use std::io;
+#[cfg(not(any(feature = "_rt-actix", feature = "_rt-tokio")))]
 use std::net::Shutdown;
 use std::path::Path;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+#[cfg(any(feature = "_rt-actix", feature = "_rt-tokio"))]
+use sqlx_rt::AsyncWriteExt;
 use sqlx_rt::{AsyncRead, AsyncWrite, TcpStream};
 
 #[derive(Debug)]
@@ -36,12 +39,23 @@ impl Socket {
         ))
     }
 
+    #[cfg(not(any(feature = "_rt-actix", feature = "_rt-tokio")))]
     pub fn shutdown(&self) -> io::Result<()> {
         match self {
             Socket::Tcp(s) => s.shutdown(Shutdown::Both),
 
             #[cfg(unix)]
             Socket::Unix(s) => s.shutdown(Shutdown::Both),
+        }
+    }
+
+    #[cfg(any(feature = "_rt-actix", feature = "_rt-tokio"))]
+    pub async fn shutdown(&mut self) -> io::Result<()> {
+        match self {
+            Socket::Tcp(s) => s.shutdown().await,
+
+            #[cfg(unix)]
+            Socket::Unix(s) => s.shutdown().await,
         }
     }
 }
