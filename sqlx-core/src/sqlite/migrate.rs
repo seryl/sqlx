@@ -108,11 +108,11 @@ CREATE TABLE IF NOT EXISTS _sqlx_migrations (
                     .await?;
 
             if let Some(checksum) = checksum {
-                return if checksum == &*migration.checksum {
+                if checksum == &*migration.checksum {
                     Ok(())
                 } else {
                     Err(MigrateError::VersionMismatch(migration.version))
-                };
+                }
             } else {
                 Err(MigrateError::VersionMissing(migration.version))
             }
@@ -146,6 +146,30 @@ CREATE TABLE IF NOT EXISTS _sqlx_migrations (
             .bind(elapsed.as_nanos() as i64)
             .execute(self)
             .await?;
+
+            Ok(elapsed)
+        })
+    }
+
+    fn revert<'e: 'm, 'm>(
+        &'e mut self,
+        migration: &'m Migration,
+    ) -> BoxFuture<'m, Result<Duration, MigrateError>> {
+        Box::pin(async move {
+            let mut tx = self.begin().await?;
+            let start = Instant::now();
+
+            let _ = tx.execute(&*migration.sql).await?;
+
+            tx.commit().await?;
+
+            let elapsed = start.elapsed();
+
+            // language=SQL
+            let _ = query(r#"DELETE FROM _sqlx_migrations WHERE version = ?1"#)
+                .bind(migration.version)
+                .execute(self)
+                .await?;
 
             Ok(elapsed)
         })

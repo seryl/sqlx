@@ -12,14 +12,14 @@ use std::cmp;
 use std::mem;
 use std::ptr;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use std::task::Context;
 use std::time::Instant;
 
 pub(crate) struct SharedPool<DB: Database> {
     pub(super) connect_options: <DB::Connection as Connection>::Options,
     pub(super) idle_conns: ArrayQueue<Idle<DB>>,
-    waiters: SegQueue<Arc<Waiter>>,
+    waiters: SegQueue<Weak<Waiter>>,
     pub(super) size: AtomicU32,
     is_closed: AtomicBool,
     pub(super) options: PoolOptions<DB>,
@@ -41,16 +41,19 @@ impl<DB: Database> SharedPool<DB> {
 
     pub(super) async fn close(&self) {
         self.is_closed.store(true, Ordering::Release);
-        while let Ok(waker) = self.waiters.pop() {
-            waker.wake();
+        while let Some(waker) = self.waiters.pop() {
+            if let Some(waker) = waker.upgrade() {
+                waker.wake();
+            }
         }
 
         // ensure we wait until the pool is actually closed
         while self.size() > 0 {
-            let _ = self
-                .idle_conns
-                .pop()
-                .map(|idle| Floating::from_idle(idle, self));
+            if let Some(idle) = self.idle_conns.pop() {
+                if let Err(e) = Floating::from_idle(idle, self).close().await {
+                    log::warn!("error occurred while closing the pool connection: {}", e);
+                }
+            }
 
             // yield to avoid starving the executor
             sqlx_rt::yield_now().await;
@@ -71,7 +74,7 @@ impl<DB: Database> SharedPool<DB> {
             return None;
         }
 
-        Some(Floating::from_idle(self.idle_conns.pop().ok()?, self))
+        Some(Floating::from_idle(self.idle_conns.pop()?, self))
     }
 
     pub(super) fn release(&self, mut floating: Floating<'_, Live<DB>>) {
@@ -82,12 +85,20 @@ impl<DB: Database> SharedPool<DB> {
             }
         }
 
-        self.idle_conns
+        let is_ok = self
+            .idle_conns
             .push(floating.into_idle().into_leakable())
-            .expect("BUG: connection queue overflow in release()");
+            .is_ok();
 
-        if let Ok(waker) = self.waiters.pop() {
-            waker.wake();
+        if !is_ok {
+            panic!("BUG: connection queue overflow in release()");
+        }
+
+        while let Some(waker) = self.waiters.pop() {
+            if let Some(waker) = waker.upgrade() {
+                waker.wake();
+                break;
+            }
         }
     }
 
@@ -131,7 +142,7 @@ impl<DB: Database> SharedPool<DB> {
             future::poll_fn(|cx| -> Poll<()> {
                 let waiter = waiter.get_or_insert_with(|| {
                     let waiter = Waiter::new(cx);
-                    self.waiters.push(waiter.clone());
+                    self.waiters.push(Arc::downgrade(&waiter));
                     waiter
                 });
 
@@ -171,6 +182,7 @@ impl<DB: Database> SharedPool<DB> {
         let start = Instant::now();
         let deadline = start + self.options.connect_timeout;
         let mut waited = !self.options.fair;
+        let mut backoff = 0.01;
 
         // Unless the pool has been closed ...
         while !self.is_closed() {
@@ -190,7 +202,14 @@ impl<DB: Database> SharedPool<DB> {
                 match self.connection(deadline, guard).await {
                     Ok(Some(conn)) => return Ok(conn),
                     // [size] is internally decremented on _retry_ and _error_
-                    Ok(None) => continue,
+                    Ok(None) => {
+                        // If the connection is refused wait in exponentially
+                        // increasing steps for the server to come up, capped by
+                        // two seconds.
+                        sqlx_rt::sleep(std::time::Duration::from_secs_f64(backoff)).await;
+                        backoff = f64::min(backoff * 2.0, 2.0);
+                        continue;
+                    }
                     Err(e) => return Err(e),
                 }
             }
@@ -228,7 +247,7 @@ impl<DB: Database> SharedPool<DB> {
             }
 
             // an IO error while connecting is assumed to be the system starting up
-            Ok(Err(Error::Io(_))) => Ok(None),
+            Ok(Err(Error::Io(e))) if e.kind() == std::io::ErrorKind::ConnectionRefused => Ok(None),
 
             // TODO: Handle other database "boot period"s
 
@@ -330,9 +349,11 @@ fn spawn_reaper<DB: Database>(pool: &Arc<SharedPool<DB>>) {
 
             for conn in keep {
                 // return these connections to the pool first
-                pool.idle_conns
-                    .push(conn.into_leakable())
-                    .expect("BUG: connection queue overflow in spawn_reaper");
+                let is_ok = pool.idle_conns.push(conn.into_leakable()).is_ok();
+
+                if !is_ok {
+                    panic!("BUG: connection queue overflow in spawn_reaper");
+                }
             }
 
             for conn in reap {
@@ -350,7 +371,7 @@ fn spawn_reaper<DB: Database>(pool: &Arc<SharedPool<DB>>) {
 /// (where the pool thinks it has more connections than it does).
 pub(in crate::pool) struct DecrementSizeGuard<'a> {
     size: &'a AtomicU32,
-    waiters: &'a SegQueue<Arc<Waiter>>,
+    waiters: &'a SegQueue<Weak<Waiter>>,
     dropped: bool,
 }
 
@@ -378,8 +399,10 @@ impl Drop for DecrementSizeGuard<'_> {
         assert!(!self.dropped, "double-dropped!");
         self.dropped = true;
         self.size.fetch_sub(1, Ordering::SeqCst);
-        if let Ok(waker) = self.waiters.pop() {
-            waker.wake();
+        if let Some(waker) = self.waiters.pop() {
+            if let Some(waker) = waker.upgrade() {
+                waker.wake();
+            }
         }
     }
 }

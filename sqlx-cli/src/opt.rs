@@ -29,6 +29,10 @@ pub enum Command {
         #[clap(long)]
         check: bool,
 
+        /// Generate a single top-level `sqlx-data.json` file when using a cargo workspace.
+        #[clap(long)]
+        merged: bool,
+
         /// Arguments to be passed to `cargo rustc ...`.
         #[clap(last = true)]
         args: Vec<String>,
@@ -93,10 +97,28 @@ pub struct MigrateOpt {
 pub enum MigrateCommand {
     /// Create a new migration with the given description,
     /// and the current time as the version.
-    Add { description: String },
+    Add {
+        description: String,
+
+        /// If true, creates a pair of up and down migration files with same version
+        /// else creates a single sql file
+        #[clap(short)]
+        reversible: bool,
+    },
 
     /// Run all pending migrations.
-    Run,
+    Run {
+        /// List all the migrations to be run without applying
+        #[clap(long)]
+        dry_run: bool,
+    },
+
+    /// Revert the latest migration with a down file.
+    Revert {
+        /// List the migration to be reverted without applying
+        #[clap(long)]
+        dry_run: bool,
+    },
 
     /// List all available migrations.
     Info,

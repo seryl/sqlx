@@ -31,8 +31,16 @@ hint: This command only works in the manifest directory of a Cargo package."#
 
     match opt.command {
         Command::Migrate(migrate) => match migrate.command {
-            MigrateCommand::Add { description } => migrate::add(&migrate.source, &description)?,
-            MigrateCommand::Run => migrate::run(&migrate.source, &database_url).await?,
+            MigrateCommand::Add {
+                description,
+                reversible,
+            } => migrate::add(&migrate.source, &description, reversible).await?,
+            MigrateCommand::Run { dry_run } => {
+                migrate::run(&migrate.source, &database_url, dry_run).await?
+            }
+            MigrateCommand::Revert { dry_run } => {
+                migrate::revert(&migrate.source, &database_url, dry_run).await?
+            }
             MigrateCommand::Info => migrate::info(&migrate.source, &database_url).await?,
         },
 
@@ -45,9 +53,17 @@ hint: This command only works in the manifest directory of a Cargo package."#
             DatabaseCommand::Setup { source } => database::setup(&source, &database_url).await?,
         },
 
-        Command::Prepare { check: false, args } => prepare::run(&database_url, args)?,
+        Command::Prepare {
+            check: false,
+            merged,
+            args,
+        } => prepare::run(&database_url, merged, args)?,
 
-        Command::Prepare { check: true, args } => prepare::check(&database_url, args)?,
+        Command::Prepare {
+            check: true,
+            merged,
+            args,
+        } => prepare::check(&database_url, merged, args)?,
     };
 
     Ok(())

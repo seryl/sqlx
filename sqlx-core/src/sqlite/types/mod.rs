@@ -10,7 +10,7 @@
 //! | `i64`                                 | BIGINT, INT8                                         |
 //! | `f32`                                 | REAL                                                 |
 //! | `f64`                                 | REAL                                                 |
-//! | `&str`, `String`                      | TEXT                                                 |
+//! | `&str`, [`String`]                    | TEXT                                                 |
 //! | `&[u8]`, `Vec<u8>`                    | BLOB                                                 |
 //!
 //! ### [`chrono`](https://crates.io/crates/chrono)
@@ -22,6 +22,15 @@
 //! | `chrono::NaiveDateTime`               | DATETIME                                             |
 //! | `chrono::DateTime<Utc>`               | DATETIME                                             |
 //! | `chrono::DateTime<Local>`             | DATETIME                                             |
+//!
+//! ### [`uuid`](https://crates.io/crates/uuid)
+//!
+//! Requires the `uuid` Cargo feature flag.
+//!
+//! | Rust type                             | Sqlite type(s)                                       |
+//! |---------------------------------------|------------------------------------------------------|
+//! | `uuid::Uuid`                          | BLOB, TEXT                                           |
+//! | `uuid::adapter::Hyphenated`           | TEXT                                                 |
 //!
 //! # Nullable
 //!
@@ -38,3 +47,5 @@ mod int;
 #[cfg(feature = "json")]
 mod json;
 mod str;
+#[cfg(feature = "uuid")]
+mod uuid;

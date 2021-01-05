@@ -106,3 +106,43 @@ mod chrono {
         "datetime('2016-11-08T03:50:23-05:00')" == FixedOffset::west(5 * 3600).ymd(2016, 11, 08).and_hms(3, 50, 23)
     ));
 }
+
+#[cfg(feature = "bstr")]
+mod bstr {
+    use super::*;
+    use sqlx::types::bstr::BString;
+
+    test_type!(bstring<BString>(Sqlite,
+        "cast('abc123' as blob)" == BString::from(&b"abc123"[..]),
+        "x'0001020304'" == BString::from(&b"\x00\x01\x02\x03\x04"[..])
+    ));
+}
+
+#[cfg(feature = "git2")]
+mod git2 {
+    use super::*;
+    use sqlx::types::git2::Oid;
+
+    test_type!(oid<Oid>(
+        Sqlite,
+        "x'0000000000000000000000000000000000000000'" == Oid::zero(),
+        "x'000102030405060708090a0b0c0d0e0f10111213'"
+            == Oid::from_str("000102030405060708090a0b0c0d0e0f10111213").unwrap()
+    ));
+}
+
+#[cfg(feature = "uuid")]
+test_type!(uuid<sqlx::types::Uuid>(Sqlite,
+    "x'b731678f636f4135bc6f19440c13bd19'"
+        == sqlx::types::Uuid::parse_str("b731678f-636f-4135-bc6f-19440c13bd19").unwrap(),
+    "x'00000000000000000000000000000000'"
+        == sqlx::types::Uuid::parse_str("00000000-0000-0000-0000-000000000000").unwrap()
+));
+
+#[cfg(feature = "uuid")]
+test_type!(uuid_hyphenated<sqlx::types::uuid::adapter::Hyphenated>(Sqlite,
+    "'b731678f-636f-4135-bc6f-19440c13bd19'"
+        == sqlx::types::Uuid::parse_str("b731678f-636f-4135-bc6f-19440c13bd19").unwrap().to_hyphenated(),
+    "'00000000-0000-0000-0000-000000000000'"
+        == sqlx::types::Uuid::parse_str("00000000-0000-0000-0000-000000000000").unwrap().to_hyphenated()
+));

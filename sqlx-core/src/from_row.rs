@@ -3,7 +3,7 @@ use crate::row::Row;
 
 /// A record that can be built from a row returned by the database.
 ///
-/// In order to use [`query_as`] the output type must implement `FromRow`.
+/// In order to use [`query_as`](crate::query_as) the output type must implement `FromRow`.
 ///
 /// ## Derivable
 ///
@@ -63,7 +63,7 @@ use crate::row::Row;
 /// ```
 ///
 /// The supported values are `snake_case` (available if you have non-snake-case field names for some
-/// reason), `lowercase`, `UPPERCASE`, `camelCase`, `SCREAMING_SNAKE_CASE` and `kebab-case`.
+/// reason), `lowercase`, `UPPERCASE`, `camelCase`, `PascalCase`, `SCREAMING_SNAKE_CASE` and `kebab-case`.
 /// The styling of each option is intended to be an example of its behavior.
 ///
 /// #### `default`
@@ -92,8 +92,6 @@ use crate::row::Row;
 /// will set the value of the field `location` to the default value of `Option<String>`,
 /// which is `None`.
 ///
-/// [`query_as`]: fn.query_as.html
-/// [`Row::try_get`]: trait.Row.html#method.try_get
 pub trait FromRow<'r, R: Row>: Sized {
     fn from_row(row: &'r R) -> Result<Self, Error>;
 }

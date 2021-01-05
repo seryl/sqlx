@@ -113,9 +113,9 @@ SQLx is compatible with the [`async-std`], [`tokio`] and [`actix`] runtimes; and
 # Cargo.toml
 [dependencies]
 # tokio + rustls
-sqlx = { version = "0.4.0", features = [ "runtime-tokio-rustls" ] }
+sqlx = { version = "0.4.2", features = [ "runtime-tokio-rustls" ] }
 # async-std + native-tls
-sqlx = { version = "0.4.0", features = [ "runtime-async-std-native-tls" ] }
+sqlx = { version = "0.4.2", features = [ "runtime-async-std-native-tls" ] }
 ```
 
 <sub><sup>The runtime and TLS backend not being separate feature sets to select is a workaround for a [Cargo issue](https://github.com/rust-lang/cargo/issues/3494).</sup></sub>
@@ -136,6 +136,8 @@ sqlx = { version = "0.4.0", features = [ "runtime-async-std-native-tls" ] }
 
 -   `postgres`: Add support for the Postgres database server.
 
+-   `mysql`: Add support for the MySQL/MariaDB database server.
+
 -   `mssql`: Add support for the MSSQL database server.
 
 -   `sqlite`: Add support for the self-contained [SQLite](https://sqlite.org/) database engine.
@@ -152,6 +154,10 @@ sqlx = { version = "0.4.0", features = [ "runtime-async-std-native-tls" ] }
 
 -   `time`: Add support for date and time types from `time` crate (alternative to `chrono`, prefered by `query!` macro, if both enabled)
 
+-   `bstr`: Add support for `bstr::BString`.
+
+-   `git2`: Add support for `git2::Oid`.
+
 -   `bigdecimal`: Add support for `NUMERIC` using the `bigdecimal` crate.
 
 -   `decimal`: Add support for `NUMERIC` using the `rust_decimal` crate.
@@ -166,19 +172,27 @@ sqlx = { version = "0.4.0", features = [ "runtime-async-std-native-tls" ] }
 
 ### Quickstart
 
-```rust
-use std::env;
+```toml
+[dependencies]
+sqlx = { version = "0.4.1", features = [ "postgres" ] }
+async-std = { version = "1.6", features = [ "attributes" ] }
+```
 
+```rust
 use sqlx::postgres::PgPoolOptions;
 // use sqlx::mysql::MySqlPoolOptions;
 // etc.
 
-#[async_std::main] // or #[tokio::main]
+#[async_std::main]
+// or #[tokio::main]
 async fn main() -> Result<(), sqlx::Error> {
     // Create a connection pool
+    //  for MySQL, use MySqlPoolOptions::new()
+    //  for SQLite, use SqlitePoolOptions::new()
+    //  etc.
     let pool = PgPoolOptions::new()
         .max_connections(5)
-        .connect(&env::var("DATABASE_URL")?).await?;
+        .connect("postgres://postgres:password@localhost/test").await?;
 
     // Make a simple query to return the given parameter
     let row: (i64,) = sqlx::query_as("SELECT $1")
