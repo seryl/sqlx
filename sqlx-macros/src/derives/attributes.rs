@@ -33,6 +33,8 @@ pub enum RenameAll {
     UpperCase,
     ScreamingSnakeCase,
     KebabCase,
+    CamelCase,
+    PascalCase,
 }
 
 pub struct SqlxContainerAttributes {
@@ -53,7 +55,10 @@ pub fn parse_container_attributes(input: &[Attribute]) -> syn::Result<SqlxContai
     let mut rename = None;
     let mut rename_all = None;
 
-    for attr in input {
+    for attr in input
+        .iter()
+        .filter(|a| a.path.is_ident("sqlx") || a.path.is_ident("repr"))
+    {
         let meta = attr
             .parse_meta()
             .map_err(|e| syn::Error::new_spanned(attr, e))?;
@@ -77,7 +82,8 @@ pub fn parse_container_attributes(input: &[Attribute]) -> syn::Result<SqlxContai
                                     "UPPERCASE" => RenameAll::UpperCase,
                                     "SCREAMING_SNAKE_CASE" => RenameAll::ScreamingSnakeCase,
                                     "kebab-case" => RenameAll::KebabCase,
-
+                                    "camelCase" => RenameAll::CamelCase,
+                                    "PascalCase" => RenameAll::PascalCase,
                                     _ => fail!(meta, "unexpected value for rename_all"),
                                 };
 
@@ -128,24 +134,21 @@ pub fn parse_child_attributes(input: &[Attribute]) -> syn::Result<SqlxChildAttri
             .parse_meta()
             .map_err(|e| syn::Error::new_spanned(attr, e))?;
 
-        match meta {
-            Meta::List(list) => {
-                for value in list.nested.iter() {
-                    match value {
-                        NestedMeta::Meta(meta) => match meta {
-                            Meta::NameValue(MetaNameValue {
-                                path,
-                                lit: Lit::Str(val),
-                                ..
-                            }) if path.is_ident("rename") => try_set!(rename, val.value(), value),
-                            Meta::Path(path) if path.is_ident("default") => default = true,
-                            u => fail!(u, "unexpected attribute"),
-                        },
+        if let Meta::List(list) = meta {
+            for value in list.nested.iter() {
+                match value {
+                    NestedMeta::Meta(meta) => match meta {
+                        Meta::NameValue(MetaNameValue {
+                            path,
+                            lit: Lit::Str(val),
+                            ..
+                        }) if path.is_ident("rename") => try_set!(rename, val.value(), value),
+                        Meta::Path(path) if path.is_ident("default") => default = true,
                         u => fail!(u, "unexpected attribute"),
-                    }
+                    },
+                    u => fail!(u, "unexpected attribute"),
                 }
             }
-            _ => {}
         }
     }
 
@@ -177,7 +180,7 @@ pub fn check_transparent_attributes(
     Ok(attributes)
 }
 
-pub fn check_enum_attributes<'a>(input: &'a DeriveInput) -> syn::Result<SqlxContainerAttributes> {
+pub fn check_enum_attributes(input: &DeriveInput) -> syn::Result<SqlxContainerAttributes> {
     let attributes = parse_container_attributes(&input.attrs)?;
 
     assert_attribute!(

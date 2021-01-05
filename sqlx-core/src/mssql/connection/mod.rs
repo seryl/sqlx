@@ -1,5 +1,5 @@
 use crate::common::StatementCache;
-use crate::connection::Connection;
+use crate::connection::{Connection, LogSettings};
 use crate::error::Error;
 use crate::executor::Executor;
 use crate::mssql::connection::stream::MssqlStream;
@@ -7,8 +7,13 @@ use crate::mssql::statement::MssqlStatementMetadata;
 use crate::mssql::{Mssql, MssqlConnectOptions};
 use crate::transaction::Transaction;
 use futures_core::future::BoxFuture;
-use futures_util::{future::ready, FutureExt, TryFutureExt};
+#[cfg(not(any(feature = "_rt-actix", feature = "_rt-tokio")))]
+use futures_util::future::ready;
+use futures_util::{FutureExt, TryFutureExt};
+#[cfg(any(feature = "_rt-actix", feature = "_rt-tokio"))]
+use sqlx_rt::AsyncWriteExt;
 use std::fmt::{self, Debug, Formatter};
+#[cfg(not(any(feature = "_rt-actix", feature = "_rt-tokio")))]
 use std::net::Shutdown;
 use std::sync::Arc;
 
@@ -20,6 +25,7 @@ mod stream;
 pub struct MssqlConnection {
     pub(crate) stream: MssqlStream,
     pub(crate) cache_statement: StatementCache<Arc<MssqlStatementMetadata>>,
+    log_settings: LogSettings,
 }
 
 impl Debug for MssqlConnection {
@@ -33,9 +39,16 @@ impl Connection for MssqlConnection {
 
     type Options = MssqlConnectOptions;
 
+    #[cfg(not(any(feature = "_rt-actix", feature = "_rt-tokio")))]
     fn close(self) -> BoxFuture<'static, Result<(), Error>> {
         // NOTE: there does not seem to be a clean shutdown packet to send to MSSQL
         ready(self.stream.shutdown(Shutdown::Both).map_err(Into::into)).boxed()
+    }
+
+    #[cfg(any(feature = "_rt-actix", feature = "_rt-tokio"))]
+    fn close(mut self) -> BoxFuture<'static, Result<(), Error>> {
+        // NOTE: there does not seem to be a clean shutdown packet to send to MSSQL
+        Box::pin(async move { Ok(self.stream.shutdown().await?) })
     }
 
     fn ping(&mut self) -> BoxFuture<'_, Result<(), Error>> {

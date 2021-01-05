@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 mod connect;
 mod parse;
 mod ssl_mode;
-
+use crate::connection::LogSettings;
 pub use ssl_mode::PgSslMode;
 
 /// Options and flags which can be used to configure a PostgreSQL connection.
@@ -22,7 +22,7 @@ pub use ssl_mode::PgSslMode;
 ///
 /// |Parameter|Default|Description|
 /// |---------|-------|-----------|
-/// | `sslmode` | `prefer` | Determines whether or with what priority a secure SSL TCP/IP connection will be negotiated. See [`PgSqlSslMode`]. |
+/// | `sslmode` | `prefer` | Determines whether or with what priority a secure SSL TCP/IP connection will be negotiated. See [`PgSslMode`]. |
 /// | `sslrootcert` | `None` | Sets the name of a file containing a list of trusted SSL Certificate Authorities. |
 /// | `statement-cache-capacity` | `100` | The maximum number of prepared statements stored in the cache. Set to `0` to disable. |
 /// | `host` | `None` | Path to the directory containing a PostgreSQL unix domain socket, which will be used instead of TCP if set. |
@@ -54,7 +54,7 @@ pub use ssl_mode::PgSslMode;
 /// # use sqlx_core::postgres::{PgConnectOptions, PgConnection, PgSslMode};
 /// #
 /// # fn main() {
-/// # #[cfg(feature = "runtime-async-std")]
+/// # #[cfg(feature = "_rt-async-std")]
 /// # sqlx_rt::async_std::task::block_on::<_, Result<(), Error>>(async move {
 /// // URI connection string
 /// let conn = PgConnection::connect("postgres://localhost/mydb").await?;
@@ -71,8 +71,6 @@ pub use ssl_mode::PgSslMode;
 /// # }).unwrap();
 /// # }
 /// ```
-///
-/// [`PgSqlSslMode`]: enum.PgSslMode.html
 #[derive(Debug, Clone)]
 pub struct PgConnectOptions {
     pub(crate) host: String,
@@ -85,6 +83,7 @@ pub struct PgConnectOptions {
     pub(crate) ssl_root_cert: Option<PathBuf>,
     pub(crate) statement_cache_capacity: usize,
     pub(crate) application_name: Option<String>,
+    pub(crate) log_settings: LogSettings,
 }
 
 impl Default for PgConnectOptions {
@@ -136,6 +135,7 @@ impl PgConnectOptions {
                 .unwrap_or_default(),
             statement_cache_capacity: 100,
             application_name: var("PGAPPNAME").ok(),
+            log_settings: Default::default(),
         }
     }
 

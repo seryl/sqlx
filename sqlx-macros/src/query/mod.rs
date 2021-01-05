@@ -1,5 +1,5 @@
-use std::borrow::Cow;
 use std::env;
+use std::{borrow::Cow, path::PathBuf};
 
 use proc_macro2::{Span, TokenStream};
 use syn::Type;
@@ -16,11 +16,28 @@ use crate::database::DatabaseExt;
 use crate::query::data::QueryData;
 use crate::query::input::RecordType;
 use either::Either;
+use lazy_static::lazy_static;
 
 mod args;
 mod data;
 mod input;
 mod output;
+
+// If we are in a workspace, lookup `workspace_root` since `CARGO_MANIFEST_DIR` won't
+// reflect the workspace dir: https://github.com/rust-lang/cargo/issues/3946
+lazy_static! {
+    static ref CRATE_ROOT: PathBuf = {
+        let manifest_dir =
+            env::var("CARGO_MANIFEST_DIR").expect("`CARGO_MANIFEST_DIR` must be set");
+
+        let metadata = cargo_metadata::MetadataCommand::new()
+            .current_dir(manifest_dir)
+            .exec()
+            .expect("Could not fetch metadata");
+
+        metadata.workspace_root
+    };
+}
 
 pub fn expand_input(input: QueryMacroInput) -> crate::Result<TokenStream> {
     let manifest_dir =
@@ -37,7 +54,7 @@ pub fn expand_input(input: QueryMacroInput) -> crate::Result<TokenStream> {
     // if `dotenv` wasn't initialized by the above we make sure to do it here
     match (
         dotenv::var("SQLX_OFFLINE")
-            .map(|s| s.to_lowercase() == "true")
+            .map(|s| s.eq_ignore_ascii_case("true") || s == "1")
             .unwrap_or(false),
         dotenv::var("DATABASE_URL"),
     ) {
@@ -47,8 +64,12 @@ pub fn expand_input(input: QueryMacroInput) -> crate::Result<TokenStream> {
         _ => {
             let data_file_path = std::path::Path::new(&manifest_dir).join("sqlx-data.json");
 
+            let workspace_data_file_path = CRATE_ROOT.join("sqlx-data.json");
+
             if data_file_path.exists() {
                 expand_from_file(input, data_file_path)
+            } else if workspace_data_file_path.exists() {
+                expand_from_file(input, workspace_data_file_path)
             } else {
                 Err(
                     "`DATABASE_URL` must be set, or `cargo sqlx prepare` must have been run \
@@ -86,7 +107,7 @@ fn expand_from_db(input: QueryMacroInput, db_url: &str) -> crate::Result<TokenSt
         },
 
         #[cfg(not(feature = "postgres"))]
-        "postgres" | "postgresql" => Err(format!("database URL has the scheme of a PostgreSQL database but the `postgres` feature is not enabled").into()),
+        "postgres" | "postgresql" => Err("database URL has the scheme of a PostgreSQL database but the `postgres` feature is not enabled".into()),
 
         #[cfg(feature = "mssql")]
         "mssql" | "sqlserver" => {
@@ -99,7 +120,7 @@ fn expand_from_db(input: QueryMacroInput, db_url: &str) -> crate::Result<TokenSt
         },
 
         #[cfg(not(feature = "mssql"))]
-        "mssql" | "sqlserver" => Err(format!("database URL has the scheme of a MSSQL database but the `mssql` feature is not enabled").into()),
+        "mssql" | "sqlserver" => Err("database URL has the scheme of a MSSQL database but the `mssql` feature is not enabled".into()),
 
         #[cfg(feature = "mysql")]
         "mysql" | "mariadb" => {
@@ -112,7 +133,7 @@ fn expand_from_db(input: QueryMacroInput, db_url: &str) -> crate::Result<TokenSt
         },
 
         #[cfg(not(feature = "mysql"))]
-        "mysql" | "mariadb" => Err(format!("database URL has the scheme of a MySQL/MariaDB database but the `mysql` feature is not enabled").into()),
+        "mysql" | "mariadb" => Err("database URL has the scheme of a MySQL/MariaDB database but the `mysql` feature is not enabled".into()),
 
         #[cfg(feature = "sqlite")]
         "sqlite" => {
@@ -125,7 +146,7 @@ fn expand_from_db(input: QueryMacroInput, db_url: &str) -> crate::Result<TokenSt
         },
 
         #[cfg(not(feature = "sqlite"))]
-        "sqlite" => Err(format!("database URL has the scheme of a SQLite database but the `sqlite` feature is not enabled").into()),
+        "sqlite" => Err("database URL has the scheme of a SQLite database but the `sqlite` feature is not enabled".into()),
 
         scheme => Err(format!("unknown database URL scheme {:?}", scheme).into())
     }
@@ -271,13 +292,18 @@ where
         record_tokens
     };
 
-    let ret_tokens = quote! {{
-        use sqlx::Arguments as _;
+    let ret_tokens = quote! {
+        {
+            #[allow(clippy::all)]
+            {
+                use sqlx::Arguments as _;
 
-        #args_tokens
+                #args_tokens
 
-        #output
-    }};
+                #output
+            }
+        }
+    };
 
     // Store query metadata only if offline support is enabled but the current build is online.
     // If the build is offline, the cache is our input so it's pointless to also write data for it.

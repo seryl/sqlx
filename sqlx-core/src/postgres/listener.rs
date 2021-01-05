@@ -142,7 +142,7 @@ impl PgListener {
     ///
     /// As notifications are transient, any received while the connection was lost, will not
     /// be returned. If you'd prefer the reconnection to be explicit and have a chance to
-    /// do something before, please see [`try_recv`].
+    /// do something before, please see [`try_recv`](Self::try_recv).
     ///
     /// # Example
     ///
@@ -150,7 +150,7 @@ impl PgListener {
     /// # use sqlx_core::postgres::PgListener;
     /// # use sqlx_core::error::Error;
     /// #
-    /// # #[cfg(feature = "runtime-async-std")]
+    /// # #[cfg(feature = "_rt-async-std")]
     /// # sqlx_rt::block_on::<_, Result<(), Error>>(async move {
     /// # let mut listener = PgListener::connect("postgres:// ...").await?;
     /// loop {
@@ -162,8 +162,6 @@ impl PgListener {
     /// # Ok(())
     /// # }).unwrap();
     /// ```
-    ///
-    /// [`try_recv`]: #method.try_recv
     pub async fn recv(&mut self) -> Result<PgNotification, Error> {
         loop {
             if let Some(notification) = self.try_recv().await? {
@@ -183,7 +181,7 @@ impl PgListener {
     /// # use sqlx_core::postgres::PgListener;
     /// # use sqlx_core::error::Error;
     /// #
-    /// # #[cfg(feature = "runtime-async-std")]
+    /// # #[cfg(feature = "_rt-async-std")]
     /// # sqlx_rt::block_on::<_, Result<(), Error>>(async move {
     /// # let mut listener = PgListener::connect("postgres:// ...").await?;
     /// loop {
@@ -248,9 +246,8 @@ impl PgListener {
     ///
     /// The backing connection will be automatically reconnected should it be lost.
     ///
-    /// This has the same potential drawbacks as [`recv`].
+    /// This has the same potential drawbacks as [`recv`](PgListener::recv).
     ///
-    /// [`recv`]: #method.recv
     pub fn into_stream(mut self) -> impl Stream<Item = Result<PgNotification, Error>> + Unpin {
         Box::pin(try_stream! {
             loop {

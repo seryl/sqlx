@@ -1,6 +1,7 @@
 use crate::error::BoxDynError;
-use crate::migrate::Migration;
+use crate::migrate::{Migration, MigrationType};
 use futures_core::future::BoxFuture;
+#[cfg(not(any(feature = "_rt-actix", feature = "_rt-tokio")))]
 use futures_util::TryStreamExt;
 use sqlx_rt::fs;
 use std::borrow::Cow;
@@ -11,13 +12,23 @@ pub trait MigrationSource<'s>: Debug {
     fn resolve(self) -> BoxFuture<'s, Result<Vec<Migration>, BoxDynError>>;
 }
 
+#[cfg(any(feature = "_rt-actix", feature = "_rt-tokio"))]
+async fn get_next_dir(s: &mut fs::ReadDir) -> std::io::Result<Option<fs::DirEntry>> {
+    s.next_entry().await
+}
+
+#[cfg(not(any(feature = "_rt-actix", feature = "_rt-tokio")))]
+async fn get_next_dir(s: &mut fs::ReadDir) -> std::io::Result<Option<fs::DirEntry>> {
+    s.try_next().await
+}
+
 impl<'s> MigrationSource<'s> for &'s Path {
     fn resolve(self) -> BoxFuture<'s, Result<Vec<Migration>, BoxDynError>> {
         Box::pin(async move {
             let mut s = fs::read_dir(self.canonicalize()?).await?;
             let mut migrations = Vec::new();
 
-            while let Some(entry) = s.try_next().await? {
+            while let Some(entry) = get_next_dir(&mut s).await? {
                 if !entry.metadata().await?.is_file() {
                     // not a file; ignore
                     continue;
@@ -35,9 +46,10 @@ impl<'s> MigrationSource<'s> for &'s Path {
 
                 let version: i64 = parts[0].parse()?;
 
+                let migration_type = MigrationType::from_filename(parts[1]);
                 // remove the `.sql` and replace `_` with ` `
                 let description = parts[1]
-                    .trim_end_matches(".sql")
+                    .trim_end_matches(migration_type.suffix())
                     .replace('_', " ")
                     .to_owned();
 
@@ -46,6 +58,7 @@ impl<'s> MigrationSource<'s> for &'s Path {
                 migrations.push(Migration::new(
                     version,
                     Cow::Owned(description),
+                    migration_type,
                     Cow::Owned(sql),
                 ));
             }

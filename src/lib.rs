@@ -1,5 +1,16 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
+#[cfg(any(
+    feature = "runtime-actix",
+    feature = "runtime-async-std",
+    feature = "runtime-tokio"
+))]
+compile_error!(
+    "the features 'runtime-actix', 'runtime-async-std' and 'runtime-tokio' have been removed in
+     favor of new features 'runtime-{rt}-{tls}' where rt is one of 'actix', 'async-std' and 'tokio'
+     and 'tls' is one of 'native-tls' and 'rustls'."
+);
+
 pub use sqlx_core::acquire::Acquire;
 pub use sqlx_core::arguments::{Arguments, IntoArguments};
 pub use sqlx_core::column::Column;
@@ -76,16 +87,16 @@ pub mod ty_match;
 /// To see how each SQL type maps to a Rust type, see the corresponding `types` module for each
 /// database:
 ///
-///  * [PostgreSQL](../postgres/types/index.html)
-///  * [MySQL](../mysql/types/index.html)
-///  * [SQLite](../sqlite/types/index.html)
-///  * [MSSQL](../mssql/types/index.html)
+///  * Postgres: [postgres::types]
+///  * MySQL: [mysql::types]
+///  * SQLite: [sqlite::types]
+///  * MSSQL: [mssql::types]
 ///
 /// Any external types that have had [`Type`] implemented for, are re-exported in this module
 /// for convenience as downstream users need to use a compatible version of the external crate
 /// to take advantage of the implementation.
 ///
-/// [`Type`]: types/trait.Type.html
+/// [`Type`]: types::Type
 pub mod types {
     pub use sqlx_core::types::*;
 
@@ -94,7 +105,7 @@ pub mod types {
     pub use sqlx_macros::Type;
 }
 
-/// Provides [`Encode`](encode/trait.Encode.html) for encoding values for the database.
+/// Provides [`Encode`](encode::Encode) for encoding values for the database.
 pub mod encode {
     pub use sqlx_core::encode::{Encode, IsNull};
 
@@ -105,7 +116,7 @@ pub mod encode {
 
 pub use self::encode::Encode;
 
-/// Provides [`Decode`](decode/trait.Decode.html) for decoding values from the database.
+/// Provides [`Decode`](decode::Decode) for decoding values from the database.
 pub mod decode {
     pub use sqlx_core::decode::Decode;
 

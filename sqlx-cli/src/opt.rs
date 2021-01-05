@@ -29,6 +29,10 @@ pub enum Command {
         #[clap(long)]
         check: bool,
 
+        /// Generate a single top-level `sqlx-data.json` file when using a cargo workspace.
+        #[clap(long)]
+        merged: bool,
+
         /// Arguments to be passed to `cargo rustc ...`.
         #[clap(last = true)]
         args: Vec<String>,
@@ -57,20 +61,34 @@ pub enum DatabaseCommand {
         #[clap(short)]
         yes: bool,
     },
+
     /// Drops the database specified in your DATABASE_URL, re-creates it, and runs any pending migrations.
     Reset {
         /// Automatic confirmation. Without this option, you will be prompted before dropping
         /// your database.
         #[clap(short)]
         yes: bool,
+
+        /// Path to folder containing migrations. Defaults to 'migrations'
+        #[clap(long, default_value = "migrations")]
+        source: String,
     },
+
     /// Creates the database specified in your DATABASE_URL and runs any pending migrations.
-    Setup,
+    Setup {
+        /// Path to folder containing migrations. Defaults to 'migrations'
+        #[clap(long, default_value = "migrations")]
+        source: String,
+    },
 }
 
 /// Group of commands for creating and running migrations.
 #[derive(Clap, Debug)]
 pub struct MigrateOpt {
+    /// Path to folder containing migrations. Defaults to 'migrations'
+    #[clap(long, default_value = "migrations")]
+    pub source: String,
+
     #[clap(subcommand)]
     pub command: MigrateCommand,
 }
@@ -79,10 +97,28 @@ pub struct MigrateOpt {
 pub enum MigrateCommand {
     /// Create a new migration with the given description,
     /// and the current time as the version.
-    Add { description: String },
+    Add {
+        description: String,
+
+        /// If true, creates a pair of up and down migration files with same version
+        /// else creates a single sql file
+        #[clap(short)]
+        reversible: bool,
+    },
 
     /// Run all pending migrations.
-    Run,
+    Run {
+        /// List all the migrations to be run without applying
+        #[clap(long)]
+        dry_run: bool,
+    },
+
+    /// Revert the latest migration with a down file.
+    Revert {
+        /// List the migration to be reverted without applying
+        #[clap(long)]
+        dry_run: bool,
+    },
 
     /// List all available migrations.
     Info,

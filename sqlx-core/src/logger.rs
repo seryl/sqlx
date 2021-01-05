@@ -1,20 +1,20 @@
-use log::Level;
-use std::time::{Duration, Instant};
-
-const SLOW_QUERY_THRESHOLD: Duration = Duration::from_secs(1);
+use crate::connection::LogSettings;
+use std::time::Instant;
 
 pub(crate) struct QueryLogger<'q> {
     sql: &'q str,
     rows: usize,
     start: Instant,
+    settings: LogSettings,
 }
 
 impl<'q> QueryLogger<'q> {
-    pub(crate) fn new(sql: &'q str) -> Self {
+    pub(crate) fn new(sql: &'q str, settings: LogSettings) -> Self {
         Self {
             sql,
             rows: 0,
             start: Instant::now(),
+            settings,
         }
     }
 
@@ -25,13 +25,16 @@ impl<'q> QueryLogger<'q> {
     pub(crate) fn finish(&self) {
         let elapsed = self.start.elapsed();
 
-        let lvl = if elapsed >= SLOW_QUERY_THRESHOLD {
-            Level::Warn
+        let lvl = if elapsed >= self.settings.slow_statements_duration {
+            self.settings.slow_statements_level
         } else {
-            Level::Info
+            self.settings.statements_level
         };
 
-        if lvl <= log::STATIC_MAX_LEVEL && lvl <= log::max_level() {
+        if let Some(lvl) = lvl
+            .to_level()
+            .filter(|lvl| log::log_enabled!(target: "sqlx::query", *lvl))
+        {
             let mut summary = parse_query_summary(&self.sql);
 
             let sql = if summary != self.sql {

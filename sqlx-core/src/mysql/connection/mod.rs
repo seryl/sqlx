@@ -1,5 +1,5 @@
 use crate::common::StatementCache;
-use crate::connection::Connection;
+use crate::connection::{Connection, LogSettings};
 use crate::error::Error;
 use crate::mysql::protocol::statement::StmtClose;
 use crate::mysql::protocol::text::{Ping, Quit};
@@ -32,6 +32,8 @@ pub struct MySqlConnection {
 
     // cache by query string to the statement id and metadata
     cache_statement: StatementCache<(u32, MySqlStatementMetadata)>,
+
+    log_settings: LogSettings,
 }
 
 impl Debug for MySqlConnection {
@@ -45,10 +47,21 @@ impl Connection for MySqlConnection {
 
     type Options = MySqlConnectOptions;
 
+    #[cfg(not(any(feature = "_rt-actix", feature = "_rt-tokio")))]
     fn close(mut self) -> BoxFuture<'static, Result<(), Error>> {
         Box::pin(async move {
             self.stream.send_packet(Quit).await?;
             self.stream.shutdown()?;
+
+            Ok(())
+        })
+    }
+
+    #[cfg(any(feature = "_rt-actix", feature = "_rt-tokio"))]
+    fn close(mut self) -> BoxFuture<'static, Result<(), Error>> {
+        Box::pin(async move {
+            self.stream.send_packet(Quit).await?;
+            self.stream.shutdown().await?;
 
             Ok(())
         })

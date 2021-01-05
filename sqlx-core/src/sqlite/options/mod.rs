@@ -3,9 +3,12 @@ use std::path::Path;
 mod connect;
 mod journal_mode;
 mod parse;
+mod synchronous;
 
+use crate::connection::LogSettings;
 pub use journal_mode::SqliteJournalMode;
 use std::{borrow::Cow, time::Duration};
+pub use synchronous::SqliteSynchronous;
 
 /// Options and flags which can be used to configure a SQLite connection.
 ///
@@ -30,7 +33,7 @@ use std::{borrow::Cow, time::Duration};
 /// use std::str::FromStr;
 ///
 /// # fn main() {
-/// # #[cfg(feature = "runtime-async-std")]
+/// # #[cfg(feature = "_rt-async-std")]
 /// # sqlx_rt::async_std::task::block_on::<_, Result<(), Error>>(async move {
 /// let conn = SqliteConnectOptions::from_str("sqlite://data.db")?
 ///     .journal_mode(SqliteJournalMode::Wal)
@@ -51,6 +54,8 @@ pub struct SqliteConnectOptions {
     pub(crate) shared_cache: bool,
     pub(crate) statement_cache_capacity: usize,
     pub(crate) busy_timeout: Duration,
+    pub(crate) log_settings: LogSettings,
+    pub(crate) synchronous: SqliteSynchronous,
 }
 
 impl Default for SqliteConnectOptions {
@@ -71,6 +76,8 @@ impl SqliteConnectOptions {
             statement_cache_capacity: 100,
             journal_mode: SqliteJournalMode::Wal,
             busy_timeout: Duration::from_secs(5),
+            log_settings: Default::default(),
+            synchronous: SqliteSynchronous::Full,
         }
     }
 
@@ -130,6 +137,15 @@ impl SqliteConnectOptions {
     /// The default busy timeout is 5 seconds.
     pub fn busy_timeout(mut self, timeout: Duration) -> Self {
         self.busy_timeout = timeout;
+        self
+    }
+
+    /// Sets the [synchronous](https://www.sqlite.org/pragma.html#pragma_synchronous) setting for the database connection.
+    ///
+    /// The default synchronous settings is FULL. However, if durability is not a concern,
+    /// then NORMAL is normally all one needs in WAL mode.
+    pub fn synchronous(mut self, synchronous: SqliteSynchronous) -> Self {
+        self.synchronous = synchronous;
         self
     }
 }

@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        runtime: [async-std, tokio, actix]
+        runtime: [async-std-native-tls, tokio-native-tls, actix-native-tls, async-std-rustls, tokio-rustls, actix-rustls]
     steps:
       - uses: actions/checkout@v2
 
@@ -68,6 +68,9 @@ jobs:
   test:
     name: Unit Test
     runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        runtime: [async-std-native-tls, tokio-native-tls, actix-native-tls, async-std-rustls, tokio-rustls, actix-rustls]
     steps:
       - uses: actions/checkout@v2
 
@@ -90,7 +93,7 @@ jobs:
           command: test
           args: >
             --manifest-path sqlx-core/Cargo.toml
-            --features offline,all-databases,all-types
+            --features offline,all-databases,all-types,runtime-${{ matrix.runtime }}
 
   cli:
     name: CLI Binaries
@@ -145,7 +148,7 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        runtime: [async-std, tokio, actix]
+        runtime: [async-std-native-tls, tokio-native-tls, actix-native-tls, async-std-rustls, tokio-rustls, actix-rustls]
     needs: check
     steps:
       - uses: actions/checkout@v2
@@ -181,7 +184,7 @@ jobs:
     strategy:
       matrix:
         postgres: [12, 10, 9_6, 9_5]
-        runtime: [async-std, tokio, actix]
+        runtime: [async-std-native-tls, tokio-native-tls, actix-native-tls, async-std-rustls, tokio-rustls, actix-rustls]
     needs: check
     steps:
       - uses: actions/checkout@v2
@@ -204,7 +207,7 @@ jobs:
         with:
           command: build
           args: >
-            --features postgres,all-types
+            --features postgres,all-types,runtime-${{ matrix.runtime }}
 
       - run: docker-compose -f tests/docker-compose.yml run -d -p 5432:5432 postgres_${{ matrix.postgres }}
       - run: sleep 10
@@ -233,7 +236,7 @@ jobs:
     strategy:
       matrix:
         mysql: [8, 5_7, 5_6]
-        runtime: [async-std, tokio, actix]
+        runtime: [async-std-native-tls, tokio-native-tls, actix-native-tls, async-std-rustls, tokio-rustls, actix-rustls]
     needs: check
     steps:
       - uses: actions/checkout@v2
@@ -256,7 +259,7 @@ jobs:
         with:
           command: build
           args: >
-            --features mysql,all-types
+            --features mysql,all-types,runtime-${{ matrix.runtime }}
 
       - run: docker-compose -f tests/docker-compose.yml run -d -p 3306:3306 mysql_${{ matrix.mysql }}
       - run: sleep 60
@@ -276,7 +279,7 @@ jobs:
     strategy:
       matrix:
         mariadb: [10_5, 10_4, 10_3, 10_2, 10_1]
-        runtime: [async-std, tokio, actix]
+        runtime: [async-std-native-tls, tokio-native-tls, actix-native-tls, async-std-rustls, tokio-rustls, actix-rustls]
     needs: check
     steps:
       - uses: actions/checkout@v2
@@ -300,7 +303,7 @@ jobs:
         with:
           command: build
           args: >
-            --features mysql,all-types
+            --features mysql,all-types,runtime-${{ matrix.runtime }}
 
       - run: docker-compose -f tests/docker-compose.yml run -d -p 3306:3306 mariadb_${{ matrix.mariadb }}
       - run: sleep 30
@@ -320,7 +323,7 @@ jobs:
     strategy:
       matrix:
         mssql: [2019]
-        runtime: [async-std, tokio, actix]
+        runtime: [async-std-native-tls, tokio-native-tls, actix-native-tls, async-std-rustls, tokio-rustls, actix-rustls]
     needs: check
     steps:
       - uses: actions/checkout@v2
@@ -343,7 +346,7 @@ jobs:
         with:
           command: build
           args: >
-            --features mssql,all-types
+            --features mssql,all-types,runtime-${{ matrix.runtime }}
 
       - run: docker-compose -f tests/docker-compose.yml run -d -p 1433:1433 mssql_${{ matrix.mssql }}
       - run: sleep 80 # MSSQL takes a "bit" to startup

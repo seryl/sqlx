@@ -8,14 +8,16 @@ members = [
     "sqlx-cli",
     "sqlx-bench",
     "examples/mysql/todos",
+    "examples/postgres/json",
     "examples/postgres/listen",
     "examples/postgres/todos",
+    "examples/postgres/mockable-todos",
     "examples/sqlite/todos",
 ]
 
 [package]
 name = "sqlx"
-version = "0.4.0-beta.1"
+version = "0.4.2"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/launchbadge/sqlx"
@@ -32,11 +34,11 @@ authors = [
 ]
 
 [package.metadata.docs.rs]
-features = [ "all" ]
+features = [ "all", "runtime-async-std-native-tls" ]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = [ "macros", "runtime-async-std", "migrate" ]
+default = [ "macros", "migrate" ]
 macros = [ "sqlx-macros" ]
 migrate = [ "sqlx-macros/migrate", "sqlx-core/migrate" ]
 
@@ -50,12 +52,27 @@ offline = [ "sqlx-macros/offline", "sqlx-core/offline" ]
 # intended mainly for CI and docs
 all = [ "tls", "all-databases", "all-types" ]
 all-databases = [ "mysql", "sqlite", "postgres", "mssql", "any" ]
-all-types = [ "bigdecimal", "decimal", "json", "time", "chrono", "ipnetwork", "uuid", "bit-vec" ]
+all-types = [ "bigdecimal", "decimal", "json", "time", "chrono", "ipnetwork", "uuid", "bit-vec", "bstr", "git2" ]
 
-# runtime
-runtime-async-std = [ "sqlx-core/runtime-async-std", "sqlx-macros/runtime-async-std" ]
-runtime-actix = [ "sqlx-core/runtime-actix", "sqlx-macros/runtime-actix" ]
-runtime-tokio = [ "sqlx-core/runtime-tokio", "sqlx-macros/runtime-tokio" ]
+# previous runtimes, available as features for error messages better than just
+# "feature doesn't exist"
+runtime-actix = []
+runtime-async-std = []
+runtime-tokio = []
+
+# actual runtimes
+runtime-actix-native-tls = [ "sqlx-core/runtime-actix-native-tls", "sqlx-macros/runtime-actix-native-tls", "_rt-actix" ]
+runtime-async-std-native-tls = [ "sqlx-core/runtime-async-std-native-tls", "sqlx-macros/runtime-async-std-native-tls", "_rt-async-std" ]
+runtime-tokio-native-tls = [ "sqlx-core/runtime-tokio-native-tls", "sqlx-macros/runtime-tokio-native-tls", "_rt-tokio" ]
+
+runtime-actix-rustls = [ "sqlx-core/runtime-actix-rustls", "sqlx-macros/runtime-actix-rustls", "_rt-actix" ]
+runtime-async-std-rustls = [ "sqlx-core/runtime-async-std-rustls", "sqlx-macros/runtime-async-std-rustls", "_rt-async-std" ]
+runtime-tokio-rustls = [ "sqlx-core/runtime-tokio-rustls", "sqlx-macros/runtime-tokio-rustls", "_rt-tokio" ]
+
+# for conditional compilation
+_rt-actix = []
+_rt-async-std = []
+_rt-tokio = []
 
 # database
 any = [ "sqlx-core/any" ]
@@ -73,18 +90,20 @@ uuid = [ "sqlx-core/uuid", "sqlx-macros/uuid" ]
 json = [ "sqlx-core/json", "sqlx-macros/json" ]
 time = [ "sqlx-core/time", "sqlx-macros/time" ]
 bit-vec = [ "sqlx-core/bit-vec", "sqlx-macros/bit-vec"]
+bstr = [ "sqlx-core/bstr" ]
+git2 = [ "sqlx-core/git2" ]
 
 [dependencies]
-sqlx-core = { version = "=0.4.0-beta.1", path = "sqlx-core", default-features = false }
-sqlx-macros = { version = "=0.4.0-beta.1", path = "sqlx-macros", default-features = false, optional = true }
+sqlx-core = { version = "=0.4.2", path = "sqlx-core", default-features = false }
+sqlx-macros = { version = "=0.4.2", path = "sqlx-macros", default-features = false, optional = true }
 
 [dev-dependencies]
 anyhow = "1.0.31"
 time_ = { version = "0.2.16", package = "time" }
 futures = "0.3.5"
 env_logger = "0.7.1"
-async-std = { version = "1.7.0", features = [ "attributes" ] }
-tokio = { version = "0.3.3", features = [ "full" ] }
+async-std = { version = "1.8.0", features = [ "attributes" ] }
+tokio = { version = "1.0.1", features = [ "full" ] }
 dotenv = "0.15.0"
 trybuild = "1.0.24"
 sqlx-rt = { path = "./sqlx-rt" }

@@ -20,7 +20,7 @@ pub type BoxDynError = Box<dyn StdError + 'static + Send + Sync>;
 
 /// An unexpected `NULL` was encountered during decoding.
 ///
-/// Returned from [`Row::get`](sqlx_core::row::Row::get) if the value from the database is `NULL`,
+/// Returned from [`Row::get`](crate::row::Row::get) if the value from the database is `NULL`,
 /// and you are not decoding into an `Option`.
 #[derive(thiserror::Error, Debug)]
 #[error("unexpected null; try decoding as an `Option`")]
@@ -92,9 +92,7 @@ pub enum Error {
     #[error("attempted to acquire a connection on a closed pool")]
     PoolClosed,
 
-    /// A background worker (e.g. [`StatementWorker`]) has crashed.
-    ///
-    /// [`StatementWorker`]: crate::sqlite::StatementWorker
+    /// A background worker has crashed.
     #[error("attempted to communicate with a crashed background worker")]
     WorkerCrashed,
 
@@ -128,12 +126,6 @@ impl Error {
     #[inline]
     pub(crate) fn config(err: impl StdError + Send + Sync + 'static) -> Self {
         Error::Configuration(err.into())
-    }
-
-    #[allow(dead_code)]
-    #[inline]
-    pub(crate) fn tls(err: impl StdError + Send + Sync + 'static) -> Self {
-        Error::Tls(err.into())
     }
 }
 
@@ -177,7 +169,6 @@ impl dyn DatabaseError {
     /// Panics if the database error type is not `E`. This is a deliberate contrast from
     /// `Error::downcast_ref` which returns `Option<&E>`. In normal usage, you should know the
     /// specific error type. In other cases, use `try_downcast_ref`.
-    ///
     pub fn downcast_ref<E: DatabaseError>(&self) -> &E {
         self.try_downcast_ref().unwrap_or_else(|| {
             panic!(
@@ -194,7 +185,6 @@ impl dyn DatabaseError {
     /// Panics if the database error type is not `E`. This is a deliberate contrast from
     /// `Error::downcast` which returns `Option<E>`. In normal usage, you should know the
     /// specific error type. In other cases, use `try_downcast`.
-    ///
     pub fn downcast<E: DatabaseError>(self: Box<Self>) -> Box<E> {
         self.try_downcast().unwrap_or_else(|e| {
             panic!(
@@ -237,6 +227,22 @@ impl From<crate::migrate::MigrateError> for Error {
     #[inline]
     fn from(error: crate::migrate::MigrateError) -> Self {
         Error::Migrate(Box::new(error))
+    }
+}
+
+#[cfg(feature = "_tls-native-tls")]
+impl From<sqlx_rt::native_tls::Error> for Error {
+    #[inline]
+    fn from(error: sqlx_rt::native_tls::Error) -> Self {
+        Error::Tls(Box::new(error))
+    }
+}
+
+#[cfg(feature = "_tls-rustls")]
+impl From<webpki::InvalidDNSNameError> for Error {
+    #[inline]
+    fn from(error: webpki::InvalidDNSNameError) -> Self {
+        Error::Tls(Box::new(error))
     }
 }
 

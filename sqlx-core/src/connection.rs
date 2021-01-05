@@ -2,9 +2,10 @@ use crate::database::{Database, HasStatementCache};
 use crate::error::Error;
 use crate::transaction::Transaction;
 use futures_core::future::BoxFuture;
-use futures_core::Future;
+use log::LevelFilter;
 use std::fmt::Debug;
 use std::str::FromStr;
+use std::time::Duration;
 
 /// Represents a single database connection.
 pub trait Connection: Send {
@@ -33,30 +34,46 @@ pub trait Connection: Send {
     ///
     /// If the function returns an error, the transaction will be rolled back. If it does not
     /// return an error, the transaction will be committed.
-    fn transaction<'c: 'f, 'f, T, E, F, Fut>(&'c mut self, f: F) -> BoxFuture<'f, Result<T, E>>
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use sqlx_core::connection::Connection;
+    /// use sqlx_core::error::Error;
+    /// use sqlx_core::executor::Executor;
+    /// use sqlx_core::postgres::{PgConnection, PgRow};
+    /// use sqlx_core::query::query;
+    ///
+    /// # pub async fn _f(conn: &mut PgConnection) -> Result<Vec<PgRow>, Error> {
+    /// conn.transaction(|conn|Box::pin(async move {
+    ///     query("select * from ..").fetch_all(conn).await
+    /// })).await
+    /// # }
+    /// ```
+    fn transaction<F, R, E>(&mut self, callback: F) -> BoxFuture<'_, Result<R, E>>
     where
+        for<'c> F: FnOnce(&'c mut Transaction<'_, Self::Database>) -> BoxFuture<'c, Result<R, E>>
+            + 'static
+            + Send
+            + Sync,
         Self: Sized,
-        T: Send,
-        F: FnOnce(&mut <Self::Database as Database>::Connection) -> Fut + Send + 'f,
+        R: Send,
         E: From<Error> + Send,
-        Fut: Future<Output = Result<T, E>> + Send,
     {
         Box::pin(async move {
-            let mut tx = self.begin().await?;
+            let mut transaction = self.begin().await?;
+            let ret = callback(&mut transaction).await;
 
-            match f(&mut tx).await {
-                Ok(r) => {
-                    // no error occurred, commit the transaction
-                    tx.commit().await?;
+            match ret {
+                Ok(ret) => {
+                    transaction.commit().await?;
 
-                    Ok(r)
+                    Ok(ret)
                 }
+                Err(err) => {
+                    transaction.rollback().await?;
 
-                Err(e) => {
-                    // an error occurred, rollback the transaction
-                    tx.rollback().await?;
-
-                    Err(e)
+                    Err(err)
                 }
             }
         })
@@ -87,7 +104,7 @@ pub trait Connection: Send {
 
     /// Establish a new database connection.
     ///
-    /// A value of `Options` is parsed from the provided connection string. This parsing
+    /// A value of [`Options`][Self::Options] is parsed from the provided connection string. This parsing
     /// is database-specific.
     #[inline]
     fn connect(url: &str) -> BoxFuture<'static, Result<Self, Error>>
@@ -108,6 +125,33 @@ pub trait Connection: Send {
     }
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct LogSettings {
+    pub(crate) statements_level: LevelFilter,
+    pub(crate) slow_statements_level: LevelFilter,
+    pub(crate) slow_statements_duration: Duration,
+}
+
+impl Default for LogSettings {
+    fn default() -> Self {
+        LogSettings {
+            statements_level: LevelFilter::Info,
+            slow_statements_level: LevelFilter::Warn,
+            slow_statements_duration: Duration::from_secs(1),
+        }
+    }
+}
+
+impl LogSettings {
+    pub(crate) fn log_statements(&mut self, level: LevelFilter) {
+        self.statements_level = level;
+    }
+    pub(crate) fn log_slow_statements(&mut self, level: LevelFilter, duration: Duration) {
+        self.slow_statements_level = level;
+        self.slow_statements_duration = duration;
+    }
+}
+
 pub trait ConnectOptions: 'static + Send + Sync + FromStr<Err = Error> + Debug {
     type Connection: Connection + ?Sized;
 
@@ -115,4 +159,17 @@ pub trait ConnectOptions: 'static + Send + Sync + FromStr<Err = Error> + Debug {
     fn connect(&self) -> BoxFuture<'_, Result<Self::Connection, Error>>
     where
         Self::Connection: Sized;
+
+    /// Log executed statements with the specified `level`
+    fn log_statements(&mut self, level: LevelFilter) -> &mut Self;
+
+    /// Log executed statements with a duration above the specified `duration`
+    /// at the specified `level`.
+    fn log_slow_statements(&mut self, level: LevelFilter, duration: Duration) -> &mut Self;
+
+    /// Entirely disables statement logging (both slow and regular).
+    fn disable_statement_logging(&mut self) -> &mut Self {
+        self.log_statements(LevelFilter::Off)
+            .log_slow_statements(LevelFilter::Off, Duration::default())
+    }
 }

@@ -5,7 +5,7 @@
 ///
 /// ```rust,ignore
 /// # use sqlx::Connect;
-/// # #[cfg(all(feature = "mysql", feature = "runtime-async-std"))]
+/// # #[cfg(all(feature = "mysql", feature = "_rt-async-std"))]
 /// # #[async_std::main]
 /// # async fn main() -> sqlx::Result<()>{
 /// # let db_url = dotenv::var("DATABASE_URL").expect("DATABASE_URL must be set");
@@ -24,10 +24,21 @@
 /// # Ok(())
 /// # }
 /// #
-/// # #[cfg(any(not(feature = "mysql"), not(feature = "runtime-async-std")))]
+/// # #[cfg(any(not(feature = "mysql"), not(feature = "_rt-async-std")))]
 /// # fn main() {}
 /// ```
 ///
+/// **The method you want to call depends on how many rows you're expecting.**
+///
+/// | Number of Rows | Method to Call*             | Returns                                             | Notes |
+/// |----------------| ----------------------------|-----------------------------------------------------|-------|
+/// | None†          | `.execute(...).await`       | `sqlx::Result<impl Done>`                           | For `INSERT`/`UPDATE`/`DELETE` without `RETURNING`. See [`crate::Done`]. |
+/// | Zero or One    | `.fetch_optional(...).await`| `sqlx::Result<Option<{adhoc struct}>>`              | Extra rows are ignored. |
+/// | Exactly One    | `.fetch_one(...).await`     | `sqlx::Result<{adhoc struct}>`                      | Errors if no rows were returned. Extra rows are ignored. Aggregate queries, use this. |
+/// | At Least One   | `.fetch(...)`               | `impl Stream<Item = sqlx::Result<{adhoc struct}>>`  | Call `.try_next().await` to get each row result. |
+///
+/// \* All methods accept one of `&mut {connection type}`, `&mut Transaction` or `&Pool`.  
+/// † Only callable if the query returns no columns; otherwise it's assumed the query *may* return at least one row.
 /// ## Requirements
 /// * The `DATABASE_URL` environment variable must be set at build-time to point to a database
 /// server with the schema that the query string will be checked against. All variants of `query!()`
@@ -54,7 +65,7 @@
 ///
 /// ```rust,ignore
 /// # use sqlx::Connect;
-/// # #[cfg(all(feature = "mysql", feature = "runtime-async-std"))]
+/// # #[cfg(all(feature = "mysql", feature = "_rt-async-std"))]
 /// # #[async_std::main]
 /// # async fn main() -> sqlx::Result<()>{
 /// # let db_url = dotenv::var("DATABASE_URL").expect("DATABASE_URL must be set");
@@ -75,7 +86,7 @@
 /// # Ok(())
 /// # }
 /// #
-/// # #[cfg(any(not(feature = "mysql"), not(feature = "runtime-async-std")))]
+/// # #[cfg(any(not(feature = "mysql"), not(feature = "_rt-async-std")))]
 /// # fn main() {}
 /// ```
 ///
@@ -328,7 +339,7 @@ macro_rules! query_unchecked (
 /// `src/my_query.rs`:
 /// ```rust,ignore
 /// # use sqlx::Connect;
-/// # #[cfg(all(feature = "mysql", feature = "runtime-async-std"))]
+/// # #[cfg(all(feature = "mysql", feature = "_rt-async-std"))]
 /// # #[async_std::main]
 /// # async fn main() -> sqlx::Result<()>{
 /// # let db_url = dotenv::var("DATABASE_URL").expect("DATABASE_URL must be set");
@@ -345,7 +356,7 @@ macro_rules! query_unchecked (
 /// # Ok(())
 /// # }
 /// #
-/// # #[cfg(any(not(feature = "mysql"), not(feature = "runtime-async-std")))]
+/// # #[cfg(any(not(feature = "mysql"), not(feature = "_rt-async-std")))]
 /// # fn main() {}
 /// ```
 #[macro_export]
@@ -397,7 +408,7 @@ macro_rules! query_file_unchecked (
 /// string:
 /// ```rust,ignore
 /// # use sqlx::Connect;
-/// # #[cfg(all(feature = "mysql", feature = "runtime-async-std"))]
+/// # #[cfg(all(feature = "mysql", feature = "_rt-async-std"))]
 /// # #[async_std::main]
 /// # async fn main() -> sqlx::Result<()>{
 /// # let db_url = dotenv::var("DATABASE_URL").expect("DATABASE_URL must be set");
@@ -425,9 +436,20 @@ macro_rules! query_file_unchecked (
 /// # Ok(())
 /// # }
 /// #
-/// # #[cfg(any(not(feature = "mysql"), not(feature = "runtime-async-std")))]
+/// # #[cfg(any(not(feature = "mysql"), not(feature = "_rt-async-std")))]
 /// # fn main() {}
 /// ```
+///
+/// **The method you want to call depends on how many rows you're expecting.**
+///
+/// | Number of Rows | Method to Call*             | Returns (`T` being the given struct)   | Notes |
+/// |----------------| ----------------------------|----------------------------------------|-------|
+/// | Zero or One    | `.fetch_optional(...).await`| `sqlx::Result<Option<T>>`              | Extra rows are ignored. |
+/// | Exactly One    | `.fetch_one(...).await`     | `sqlx::Result<T>`                      | Errors if no rows were returned. Extra rows are ignored. Aggregate queries, use this. |
+/// | At Least One   | `.fetch(...)`               | `impl Stream<Item = sqlx::Result<T>>`  | Call `.try_next().await` to get each row result. |
+///
+/// \* All methods accept one of `&mut {connection type}`, `&mut Transaction` or `&Pool`.
+/// (`.execute()` is omitted as this macro requires at least one column to be returned.)
 ///
 /// ### Column Type Override: Infer from Struct Field
 /// In addition to the column type overrides supported by [query!], `query_as!()` supports an
@@ -526,7 +548,7 @@ macro_rules! query_as (
 ///
 /// ```rust,ignore
 /// # use sqlx::Connect;
-/// # #[cfg(all(feature = "mysql", feature = "runtime-async-std"))]
+/// # #[cfg(all(feature = "mysql", feature = "_rt-async-std"))]
 /// # #[async_std::main]
 /// # async fn main() -> sqlx::Result<()>{
 /// # let db_url = dotenv::var("DATABASE_URL").expect("DATABASE_URL must be set");
@@ -550,7 +572,7 @@ macro_rules! query_as (
 /// # Ok(())
 /// # }
 /// #
-/// # #[cfg(any(not(feature = "mysql"), not(feature = "runtime-async-std")))]
+/// # #[cfg(any(not(feature = "mysql"), not(feature = "_rt-async-std")))]
 /// # fn main() {}
 /// ```
 #[macro_export]
